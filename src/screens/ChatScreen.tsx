@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Animated,
   Alert,
+  PermissionsAndroid,
 } from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {CommonActions} from '@react-navigation/native';
@@ -24,6 +25,10 @@ import {
   SOCKET_CONFIG,
 } from '../features/socket';
 import { useSession } from '../features/session';
+import Voice, {
+  SpeechResultsEvent,
+  SpeechErrorEvent,
+} from '@react-native-voice/voice';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Chat'>;
 
@@ -163,6 +168,7 @@ const ChatScreen: React.FC<Props> = ({route, navigation}) => {
   const [screenState, setScreenState] = useState<ScreenState>('loading_session');
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -175,6 +181,90 @@ const ChatScreen: React.FC<Props> = ({route, navigation}) => {
     getOrCreateSession,
     clearError: clearSessionError,
   } = useSession();
+
+  // Voice recognition setup
+  useEffect(() => {
+    const onSpeechResults = (e: SpeechResultsEvent) => {
+      console.log('[ChatScreen] Speech results:', e.value);
+      if (e.value && e.value.length > 0) {
+        const spokenText = e.value[0];
+        setMessage(prev => prev ? `${prev} ${spokenText}` : spokenText);
+      }
+    };
+
+    const onSpeechError = (e: SpeechErrorEvent) => {
+      console.error('[ChatScreen] Speech error:', e.error);
+      setIsListening(false);
+      if (e.error?.message) {
+        Alert.alert('Speech Error', e.error.message);
+      }
+    };
+
+    const onSpeechEnd = () => {
+      console.log('[ChatScreen] Speech ended');
+      setIsListening(false);
+    };
+
+    Voice.onSpeechResults = onSpeechResults;
+    Voice.onSpeechError = onSpeechError;
+    Voice.onSpeechEnd = onSpeechEnd;
+
+    return () => {
+      Voice.destroy().then(Voice.removeAllListeners);
+    };
+  }, []);
+
+  // Request microphone permission (Android)
+  const requestMicrophonePermission = async (): Promise<boolean> => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Microphone Permission',
+            message: 'This app needs access to your microphone for voice input.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.error('[ChatScreen] Permission error:', err);
+        return false;
+      }
+    }
+    return true; // iOS handles permissions automatically
+  };
+
+  // Start/Stop voice recognition
+  const toggleVoiceRecognition = async () => {
+    if (isListening) {
+      try {
+        await Voice.stop();
+        setIsListening(false);
+      } catch (e) {
+        console.error('[ChatScreen] Error stopping voice:', e);
+      }
+    } else {
+      const hasPermission = await requestMicrophonePermission();
+      if (!hasPermission) {
+        Alert.alert(
+          'Permission Required',
+          'Microphone permission is required for voice input. Please enable it in your device settings.'
+        );
+        return;
+      }
+      try {
+        setIsListening(true);
+        await Voice.start('en-US');
+      } catch (e) {
+        console.error('[ChatScreen] Error starting voice:', e);
+        setIsListening(false);
+        Alert.alert('Error', 'Failed to start voice recognition. Please try again.');
+      }
+    }
+  };
 
   // Initialize session on mount
   useEffect(() => {
@@ -593,16 +683,27 @@ const ChatScreen: React.FC<Props> = ({route, navigation}) => {
 
       {/* Input Area */}
       <View style={styles.inputContainer}>
+        <TouchableOpacity
+          style={[
+            styles.micButton,
+            isListening && styles.micButtonActive,
+            !isConnected && styles.micButtonDisabled,
+          ]}
+          onPress={toggleVoiceRecognition}
+          activeOpacity={0.7}
+          disabled={!isConnected}>
+          <Text style={styles.micButtonText}>{isListening ? '⏹' : '🎤'}</Text>
+        </TouchableOpacity>
         <View style={styles.inputWrapper}>
           <TextInput
             style={styles.input}
-            placeholder="Describe your symptoms..."
+            placeholder={isListening ? "Listening..." : "Describe your symptoms..."}
             placeholderTextColor="#7A8FA6"
             value={message}
             onChangeText={handleTextChange}
             multiline
             maxLength={500}
-            editable={isConnected}
+            editable={isConnected && !isListening}
           />
         </View>
         <TouchableOpacity
@@ -613,7 +714,7 @@ const ChatScreen: React.FC<Props> = ({route, navigation}) => {
           ]}
           onPress={sendMessage}
           activeOpacity={0.7}
-          disabled={!isConnected}>
+          disabled={!isConnected || isListening}>
           <Text style={styles.sendButtonIcon}>📤</Text>
         </TouchableOpacity>
       </View>
@@ -1074,6 +1175,24 @@ const styles = StyleSheet.create({
     color: '#DC3545',
     textAlign: 'center',
     fontWeight: '500',
+  },
+  micButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 217, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  micButtonActive: {
+    backgroundColor: '#FF4444',
+  },
+  micButtonDisabled: {
+    backgroundColor: 'rgba(139, 157, 195, 0.3)',
+  },
+  micButtonText: {
+    fontSize: 20,
   },
 });
 
