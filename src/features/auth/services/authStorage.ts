@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {nativePushNotificationService} from '../../notifications';
 
 const AUTH_STORAGE_KEY = '@hridai_patient_auth';
 
@@ -46,11 +47,14 @@ export const getPatientAuth = async (): Promise<PatientAuthData | null> => {
 
 /**
  * Clear patient authentication data from persistent storage (logout)
+ * Also unregisters from remote notifications to stop receiving notifications for this user
  */
 export const clearPatientAuth = async (): Promise<boolean> => {
   try {
     await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-    console.log('[AuthStorage] Patient auth data cleared successfully');
+    // Unregister from remote notifications on logout
+    nativePushNotificationService.unregister();
+    console.log('[AuthStorage] Patient auth data cleared and unregistered from notifications');
     return true;
   } catch (error) {
     console.error('[AuthStorage] Error clearing patient auth data:', error);
@@ -70,4 +74,3 @@ export const isPatientLoggedIn = async (): Promise<boolean> => {
     return false;
   }
 };
-

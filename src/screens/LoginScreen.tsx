@@ -11,10 +11,12 @@ import {
   ScrollView,
   Modal,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../navigation/types';
 import {savePatientAuth} from '../features/auth';
+import {sessionService} from '../features/session/services/sessionService';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -75,6 +77,13 @@ const PRESET_USERS = [
     userId: '400003',
   },
   {
+    id: 'anupama',
+    name: 'Anupama',
+    healthId: 'ANPM-7625',
+    mobileNumber: '9988776655',
+    userId: '500004',
+  },
+  {
     id: 'manual',
     name: 'Enter Manually',
     healthId: '',
@@ -84,13 +93,16 @@ const PRESET_USERS = [
 ];
 
 const LoginScreen: React.FC<Props> = ({navigation}) => {
-  const [selectedUser, setSelectedUser] = useState<typeof PRESET_USERS[0] | null>(null);
+  const [selectedUser, setSelectedUser] = useState<
+    (typeof PRESET_USERS)[0] | null
+  >(null);
   const [healthId, setHealthId] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [userId, setUserId] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isStartingConsultation, setIsStartingConsultation] = useState(false);
 
-  const handleSelectUser = (user: typeof PRESET_USERS[0]) => {
+  const handleSelectUser = (user: (typeof PRESET_USERS)[0]) => {
     setSelectedUser(user);
     setHealthId(user.healthId);
     setMobileNumber(user.mobileNumber);
@@ -101,6 +113,65 @@ const LoginScreen: React.FC<Props> = ({navigation}) => {
   const validateMobileNumber = (number: string): boolean => {
     const mobileRegex = /^[0-9]{10}$/;
     return mobileRegex.test(number);
+  };
+
+  /**
+   * Mock API call to start consultation
+   * Attaches token and user details to the request
+   */
+  const callStartConsultationApi = async (
+    token: string,
+    userDetails: {
+      healthId: string;
+      mobileNumber: string;
+      userId: string;
+      patientName: string;
+    },
+  ): Promise<{success: boolean; error?: string}> => {
+    console.log(
+      '[LoginScreen] ========== START CONSULTATION API (MOCK) ==========',
+    );
+    console.log('[LoginScreen] Token:', token);
+    console.log(
+      '[LoginScreen] User Details:',
+      JSON.stringify(userDetails, null, 2),
+    );
+
+    // Mock API request payload
+    const requestPayload = {
+      session_token: token,
+      user_id: userDetails.userId,
+      health_id: userDetails.healthId,
+      mobile_number: userDetails.mobileNumber,
+      patient_name: userDetails.patientName,
+      consultation_type: 'cardiac',
+      timestamp: new Date().toISOString(),
+    };
+
+    console.log(
+      '[LoginScreen] Request Payload:',
+      JSON.stringify(requestPayload, null, 2),
+    );
+
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Mock successful response
+    const mockResponse = {
+      success: true,
+      consultation_id: `CONSULT_${Date.now()}`,
+      message: 'Consultation started successfully',
+    };
+
+    console.log(
+      '[LoginScreen] Mock Response:',
+      JSON.stringify(mockResponse, null, 2),
+    );
+    console.log(
+      '[LoginScreen] ===================================================',
+    );
+
+    return {success: true};
   };
 
   const handleContinue = async () => {
@@ -125,20 +196,74 @@ const LoginScreen: React.FC<Props> = ({navigation}) => {
     }
 
     // Get patient name from selected user or use 'Patient' as default
-    const patientName = selectedUser && selectedUser.id !== 'manual' 
-      ? selectedUser.name 
-      : 'Patient';
+    const patientName =
+      selectedUser && selectedUser.id !== 'manual'
+        ? selectedUser.name
+        : 'Patient';
 
-    // Save patient auth data for persistence
-    await savePatientAuth({
-      healthId,
-      mobileNumber,
-      userId,
-      patientName,
-      loginTimestamp: Date.now(),
-    });
+    setIsStartingConsultation(true);
 
-    navigation.navigate('Chat', {healthId, mobileNumber, userId});
+    try {
+      // Step 1: Get or create session to obtain token
+      console.log('[LoginScreen] Getting/creating session for user:', userId);
+      const sessionResult = await sessionService.getOrCreateSession(
+        userId,
+        healthId,
+      );
+
+      if (sessionResult.error || !sessionResult.data) {
+        console.error(
+          '[LoginScreen] Failed to get session:',
+          sessionResult.error,
+        );
+        Alert.alert(
+          'Session Error',
+          sessionResult.error?.message ||
+            'Failed to create session. Please try again.',
+        );
+        setIsStartingConsultation(false);
+        return;
+      }
+
+      const sessionToken = sessionResult.data.session_token;
+      console.log('[LoginScreen] Session token obtained:', sessionToken);
+
+      // Step 2: Call mock start consultation API with token and user details
+      const consultationResult = await callStartConsultationApi(sessionToken, {
+        healthId,
+        mobileNumber,
+        userId,
+        patientName,
+      });
+
+      if (!consultationResult.success) {
+        Alert.alert(
+          'Consultation Error',
+          consultationResult.error ||
+            'Failed to start consultation. Please try again.',
+        );
+        setIsStartingConsultation(false);
+        return;
+      }
+
+      // Step 3: Save patient auth data for persistence
+      await savePatientAuth({
+        healthId,
+        mobileNumber,
+        userId,
+        patientName,
+        loginTimestamp: Date.now(),
+      });
+
+      setIsStartingConsultation(false);
+
+      // Navigate to Chat screen
+      navigation.navigate('Chat', {healthId, mobileNumber, userId});
+    } catch (error) {
+      console.error('[LoginScreen] Error starting consultation:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      setIsStartingConsultation(false);
+    }
   };
 
   const handleMobileChange = (text: string) => {
@@ -148,7 +273,8 @@ const LoginScreen: React.FC<Props> = ({navigation}) => {
     }
   };
 
-  const isFormValid = healthId.trim() && mobileNumber.length === 10 && userId.trim();
+  const isFormValid =
+    healthId.trim() && mobileNumber.length === 10 && userId.trim();
 
   return (
     <KeyboardAvoidingView
@@ -349,17 +475,37 @@ const LoginScreen: React.FC<Props> = ({navigation}) => {
 
             {/* Continue Button */}
             <TouchableOpacity
-              style={[styles.button, isFormValid ? styles.buttonActive : null]}
+              style={[
+                styles.button,
+                isFormValid && !isStartingConsultation ? styles.buttonActive : null,
+                isStartingConsultation ? styles.buttonDisabled : null,
+              ]}
               onPress={handleContinue}
-              activeOpacity={0.8}>
-              <Text style={styles.buttonIcon}>💬</Text>
-              <Text
-                style={[
-                  styles.buttonText,
-                  isFormValid ? styles.buttonTextActive : null,
-                ]}>
-                Start Consultation
-              </Text>
+              activeOpacity={0.8}
+              disabled={isStartingConsultation}>
+              {isStartingConsultation ? (
+                <>
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                    style={styles.buttonLoader}
+                  />
+                  <Text style={[styles.buttonText, styles.buttonTextActive]}>
+                    Starting Consultation...
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.buttonIcon}>💬</Text>
+                  <Text
+                    style={[
+                      styles.buttonText,
+                      isFormValid ? styles.buttonTextActive : null,
+                    ]}>
+                    Start Consultation
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -778,6 +924,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 6,
+  },
+  buttonDisabled: {
+    backgroundColor: 'rgba(220, 53, 69, 0.5)',
+    borderColor: 'rgba(220, 53, 69, 0.5)',
+  },
+  buttonLoader: {
+    marginRight: 10,
   },
   buttonIcon: {
     fontSize: 18,

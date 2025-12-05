@@ -5,8 +5,16 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-platform :ios, min_ios_version_supported
+# Firebase v23+ requires iOS 15.0 or higher
+platform :ios, '15.0'
 prepare_react_native_project!
+
+# Firebase requires use_frameworks with static linkage
+$RNFirebaseAsStaticFramework = true
+
+# Enable modular headers for Firebase dependencies (required for Swift pods as static libraries)
+pod 'GoogleUtilities', :modular_headers => true
+pod 'FirebaseCore', :modular_headers => true
 
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
