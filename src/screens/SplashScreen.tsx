@@ -2,6 +2,7 @@ import React, {useEffect, useRef} from 'react';
 import {View, Text, StyleSheet, Animated, Dimensions, Easing} from 'react-native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../navigation/types';
+import {getPatientAuth} from '../features/auth';
 
 const {width, height} = Dimensions.get('window');
 
@@ -170,12 +171,38 @@ const SplashScreen: React.FC<Props> = ({navigation}) => {
       ]),
     ]).start();
 
-    // Navigate to Login after animation completes
-    const timer = setTimeout(() => {
-      navigation.replace('Login');
-    }, 3500);
+    // Check for existing login and navigate accordingly
+    const checkAuthAndNavigate = async () => {
+      try {
+        const authData = await getPatientAuth();
+        
+        // Wait for animation to complete before navigating
+        setTimeout(() => {
+          if (authData) {
+            // User is logged in, navigate to LoggedIn screen
+            console.log('[SplashScreen] Found existing login, navigating to LoggedIn');
+            navigation.replace('LoggedIn', {
+              healthId: authData.healthId,
+              mobileNumber: authData.mobileNumber,
+              userId: authData.userId,
+              patientName: authData.patientName,
+            });
+          } else {
+            // No existing login, navigate to Login screen
+            console.log('[SplashScreen] No existing login, navigating to Login');
+            navigation.replace('Login');
+          }
+        }, 3500);
+      } catch (error) {
+        console.error('[SplashScreen] Error checking auth:', error);
+        // On error, default to Login screen
+        setTimeout(() => {
+          navigation.replace('Login');
+        }, 3500);
+      }
+    };
 
-    return () => clearTimeout(timer);
+    checkAuthAndNavigate();
   }, [navigation, fadeAnim, slideAnim, taglineFade, taglineSlide]);
 
   return (
@@ -367,4 +394,3 @@ const styles = StyleSheet.create({
 });
 
 export default SplashScreen;
-

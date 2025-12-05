@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "Team11.app"
+               BuildableName = "Team11 - HridAI.app"
                BlueprintName = "Team11"
                ReferencedContainer = "container:Team11.xcodeproj">
             </BuildableReference>
@@ -55,7 +55,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "Team11.app"
+            BuildableName = "Team11 - HridAI.app"
             BlueprintName = "Team11"
             ReferencedContainer = "container:Team11.xcodeproj">
          </BuildableReference>
@@ -72,7 +72,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "Team11.app"
+            BuildableName = "Team11 - HridAI.app"
             BlueprintName = "Team11"
             ReferencedContainer = "container:Team11.xcodeproj">
          </BuildableReference>
@@ -86,4 +86,3 @@
       revealArchiveInOrganizer = "YES">
    </ArchiveAction>
 </Scheme>
-

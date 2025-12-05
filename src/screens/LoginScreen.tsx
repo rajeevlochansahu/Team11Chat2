@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../navigation/types';
+import {savePatientAuth} from '../features/auth';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -102,7 +103,7 @@ const LoginScreen: React.FC<Props> = ({navigation}) => {
     return mobileRegex.test(number);
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!healthId.trim()) {
       Alert.alert('Error', 'Please enter your Health ID');
       return;
@@ -122,6 +123,20 @@ const LoginScreen: React.FC<Props> = ({navigation}) => {
       Alert.alert('Error', 'Please enter your User ID');
       return;
     }
+
+    // Get patient name from selected user or use 'Patient' as default
+    const patientName = selectedUser && selectedUser.id !== 'manual' 
+      ? selectedUser.name 
+      : 'Patient';
+
+    // Save patient auth data for persistence
+    await savePatientAuth({
+      healthId,
+      mobileNumber,
+      userId,
+      patientName,
+      loginTimestamp: Date.now(),
+    });
 
     navigation.navigate('Chat', {healthId, mobileNumber, userId});
   };
